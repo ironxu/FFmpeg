@@ -121,6 +121,10 @@ typedef struct SegmentContext {
     int   break_non_keyframes;
     int   write_empty;
 
+
+    int64_t segment_start_cb;
+    int64_t segment_end_cb;
+
     int use_rename;
     char temp_list_filename[1024];
 
@@ -269,8 +273,17 @@ static int segment_start(AVFormatContext *s, int write_header)
         if (err < 0)
             return err;
     }
-
+    
     seg->segment_frame_count = 0;
+    // 验证 segment_start_cb 是否为有效的函数指针
+     av_log(s, AV_LOG_VERBOSE, "segment_start_cb:'%d'\n",
+           seg->segment_start_cb);
+    if (seg->segment_start_cb != 0) {
+        void (*funcPtr)(char*) = (void (*)(char*))(uintptr_t)(seg->segment_start_cb);
+        funcPtr(seg->avf->url);
+    } else {
+        av_log(s, AV_LOG_ERROR, "segment_start_cb is not a valid function pointer.\n");
+    }
     return 0;
 }
 
@@ -406,11 +419,19 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
             avio_flush(seg->list_pb);
         }
     }
-
+    // 验证 segment_end_cb 是否为有效的函数指针
+    av_log(s, AV_LOG_VERBOSE, "segment_end_cb:'%d'\n",
+           seg->segment_end_cb);
+    if (seg->segment_end_cb != 0) {
+        void (*funcPtr)(char*, int) = (void (*)(char*, int))(uintptr_t)(seg->segment_end_cb);
+        funcPtr(seg->avf->url, seg->segment_count);
+    } else {
+         av_log(s, AV_LOG_ERROR, "segment_end_cb is not a valid function pointer.\n");
+    }
     av_log(s, AV_LOG_VERBOSE, "segment:'%s' count:%d ended\n",
            seg->avf->url, seg->segment_count);
     seg->segment_count++;
-
+    
     if (seg->increment_tc) {
         tcr = av_dict_get(s->metadata, "timecode", NULL, 0);
         if (tcr) {
@@ -1075,6 +1096,10 @@ static const AVOption options[] = {
     { "reset_timestamps", "reset timestamps at the beginning of each segment", OFFSET(reset_timestamps), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, E },
     { "initial_offset", "set initial timestamp offset", OFFSET(initial_offset), AV_OPT_TYPE_DURATION, {.i64 = 0}, -INT64_MAX, INT64_MAX, E },
     { "write_empty_segments", "allow writing empty 'filler' segments", OFFSET(write_empty), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, E },
+   
+    { "segment_start_cb",      "Callback before segmentation starts",     OFFSET(segment_start_cb), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, E },
+    { "segment_end_cb",      "Call back at the end of the segment",     OFFSET(segment_end_cb), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, E },
+
     { NULL },
 };
 
