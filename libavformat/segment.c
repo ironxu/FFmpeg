@@ -275,15 +275,7 @@ static int segment_start(AVFormatContext *s, int write_header)
     }
     
     seg->segment_frame_count = 0;
-    // 验证 segment_start_cb 是否为有效的函数指针
-     av_log(s, AV_LOG_VERBOSE, "segment_start_cb:'%d'\n",
-           seg->segment_start_cb);
-    if (seg->segment_start_cb != 0) {
-        void (*funcPtr)(char*) = (void (*)(char*))(uintptr_t)(seg->segment_start_cb);
-        funcPtr(seg->avf->url);
-    } else {
-        av_log(s, AV_LOG_ERROR, "segment_start_cb is not a valid function pointer.\n");
-    }
+    
     return 0;
 }
 
@@ -423,8 +415,8 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
     av_log(s, AV_LOG_VERBOSE, "segment_end_cb:'%d'\n",
            seg->segment_end_cb);
     if (seg->segment_end_cb != 0) {
-        void (*funcPtr)(char*, int) = (void (*)(char*, int))(uintptr_t)(seg->segment_end_cb);
-        funcPtr(seg->avf->url, seg->segment_count);
+        void (*funcPtr)(char*, int) = (void (*)(char*, float))(uintptr_t)(seg->segment_end_cb);
+        funcPtr(seg->avf->url, (seg->cur_entry.end_time - seg->cur_entry.start_time));
     } else {
          av_log(s, AV_LOG_ERROR, "segment_end_cb is not a valid function pointer.\n");
     }
@@ -973,6 +965,15 @@ calc_times:
     }
 
     if (seg->segment_frame_count == 0) {
+        // 验证 segment_start_cb 是否为有效的函数指针
+         av_log(s, AV_LOG_VERBOSE, "segment_start_cb:'%d'\n",
+           seg->segment_start_cb);
+        if (seg->segment_start_cb != 0) {
+            void (*funcPtr)(char*) = (void (*)(char*))(uintptr_t)(seg->segment_start_cb);
+            funcPtr(seg->avf->url);
+        } else {
+            av_log(s, AV_LOG_ERROR, "segment_start_cb is not a valid function pointer.\n");
+        }
         av_log(s, AV_LOG_VERBOSE, "segment:'%s' starts with packet stream:%d pts:%s pts_time:%s frame:%d\n",
                seg->avf->url, pkt->stream_index,
                av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &st->time_base), seg->frame_count);
