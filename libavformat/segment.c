@@ -32,6 +32,8 @@
 #include "internal.h"
 #include "mux.h"
 
+#include "avio_internal.h"
+
 #include "libavutil/avassert.h"
 #include "libavutil/internal.h"
 #include "libavutil/log.h"
@@ -361,7 +363,6 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
     char buf[AV_TIMECODE_STR_SIZE];
     int i;
     int err;
-    int64_t start_pos, end_pos, bytes_written, total_bytes_written = 0; // 记录写出文件字节数
     
     if (!oc || !oc->pb)
         return AVERROR(EINVAL);
@@ -381,9 +382,6 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
                 ret = AVERROR(ENOMEM);
                 goto end;
             }
-
-            // 记录写入前的位置
-            start_pos = avio_tell(oc->pb);
             
             /* append new element */
             memcpy(entry, &seg->cur_entry, sizeof(*entry));
@@ -411,26 +409,20 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
             ff_format_io_close(s, &seg->list_pb);
             if (seg->use_rename)
                 ff_rename(seg->temp_list_filename, seg->list, s);
-
-            // 记录写入后的位置
-            end_pos = avio_tell(oc->pb);
-            // 计算写入的字节数
-            bytes_written = end_pos - start_pos;
-            total_bytes_written += bytes_written;
-            av_log(s, AV_LOG_INFO, "Bytes written: %" PRId64 "\n", bytes_written);
         } else {
             segment_list_print_entry(seg->list_pb, seg->list_type, &seg->cur_entry, s);
             avio_flush(seg->list_pb);
         }
     }
     // 记录写入后的总字节数
-    av_log(s, AV_LOG_INFO, "Total bytes written: %" PRId64 "\n", total_bytes_written);
+     FFIOContext *const ctx = ffiocontext(s);
+    av_log(s, AV_LOG_INFO, "Total bytes written: %" PRId64 "\n", ctx->bytes_written);
     // 验证 segment_end_cb 是否为有效的函数指针
     av_log(s, AV_LOG_VERBOSE, "segment_end_cb:'%d'\n",
            seg->segment_end_cb);
     if (seg->segment_end_cb != 0) {
         void (*funcPtr)(char*, float,int64_t,int64_t) = (void (*)(char*, float,int64_t,int64_t))(uintptr_t)(seg->segment_end_cb);//应当考虑再提供一个值，透传回调
-        funcPtr(seg->avf->url, (seg->cur_entry.end_time - seg->cur_entry.start_time),total_bytes_written,seg->segment_user_param);
+        funcPtr(seg->avf->url, (seg->cur_entry.end_time - seg->cur_entry.start_time),ctx->bytes_written,seg->segment_user_param);
     } else {
          av_log(s, AV_LOG_ERROR, "segment_end_cb is not a valid function pointer.\n");
     }
