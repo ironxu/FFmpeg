@@ -415,7 +415,7 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
         }
     }
     // 记录写入后的总字节数
-     FFIOContext *const ctx = ffiocontext(s);
+     FFIOContext *const ctx = ffiocontext(seg->list_pb);
     av_log(s, AV_LOG_INFO, "Total bytes written: %" PRId64 "\n", ctx->bytes_written);
     // 验证 segment_end_cb 是否为有效的函数指针
     av_log(s, AV_LOG_VERBOSE, "segment_end_cb:'%d'\n",
