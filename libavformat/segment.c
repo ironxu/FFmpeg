@@ -122,8 +122,9 @@ typedef struct SegmentContext {
     int   write_empty;
 
 
-    int64_t segment_start_cb;
-    int64_t segment_end_cb;
+    int64_t segment_start_cb;//分段开始回调
+    int64_t segment_end_cb;//分段结束回调
+    int64_t segment_user_param;//保留参数，回调透传
 
     int use_rename;
     char temp_list_filename[1024];
@@ -428,8 +429,8 @@ static int segment_end(AVFormatContext *s, int write_trailer, int is_last)
     av_log(s, AV_LOG_VERBOSE, "segment_end_cb:'%d'\n",
            seg->segment_end_cb);
     if (seg->segment_end_cb != 0) {
-        void (*funcPtr)(char*, float,int64_t) = (void (*)(char*, float,int64_t))(uintptr_t)(seg->segment_end_cb);//应当考虑再提供一个值，透传回调
-        funcPtr(seg->avf->url, (seg->cur_entry.end_time - seg->cur_entry.start_time),total_bytes_written);
+        void (*funcPtr)(char*, float,int64_t,int64_t) = (void (*)(char*, float,int64_t,int64_t))(uintptr_t)(seg->segment_end_cb);//应当考虑再提供一个值，透传回调
+        funcPtr(seg->avf->url, (seg->cur_entry.end_time - seg->cur_entry.start_time),total_bytes_written,seg->segment_user_param);
     } else {
          av_log(s, AV_LOG_ERROR, "segment_end_cb is not a valid function pointer.\n");
     }
@@ -982,8 +983,8 @@ calc_times:
          av_log(s, AV_LOG_VERBOSE, "segment_start_cb:'%d'\n",
            seg->segment_start_cb);
         if (seg->segment_start_cb != 0) {
-            void (*funcPtr)(char*) = (void (*)(char*))(uintptr_t)(seg->segment_start_cb);
-            funcPtr(seg->avf->url);
+            void (*funcPtr)(char*,int64_t) = (void (*)(char*,int64_t))(uintptr_t)(seg->segment_start_cb);
+            funcPtr(seg->avf->url,seg->segment_user_param);
         } else {
             av_log(s, AV_LOG_ERROR, "segment_start_cb is not a valid function pointer.\n");
         }
@@ -1113,6 +1114,7 @@ static const AVOption options[] = {
    
     { "segment_start_cb",      "Callback before segmentation starts",     OFFSET(segment_start_cb), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, E },
     { "segment_end_cb",      "Call back at the end of the segment",     OFFSET(segment_end_cb), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, E },
+    { "segment_user_param",      "user param",     OFFSET(segment_user_param), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, E },
 
     { NULL },
 };
